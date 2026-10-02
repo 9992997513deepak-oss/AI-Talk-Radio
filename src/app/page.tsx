@@ -16,7 +16,7 @@ export default function Home() {
   const [currentShow, setCurrentShow] = useState<ShowResponse | null>(null);
   const [history, setHistory] = useState<ShowResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [dailyAllowance, setDailyAllowance] = useState(3);
+  const [dailyAllowance, setDailyAllowance] = useState(50);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,8 +27,8 @@ export default function Home() {
 
       if (savedDate !== today) {
         localStorage.setItem('ai_radio_last_date', today);
-        localStorage.setItem('ai_radio_allowance', '3');
-        setDailyAllowance(3);
+        localStorage.setItem('ai_radio_allowance', '50');
+        setDailyAllowance(50);
       } else {
         const savedAllowance = localStorage.getItem('ai_radio_allowance');
         if (savedAllowance !== null) {
@@ -54,7 +54,7 @@ export default function Home() {
   const handleGenerate = async () => {
     if (!topic.trim()) return;
     if (dailyAllowance <= 0) {
-      setErrorMsg('Daily allowance limit (3/3) reached for today. Try again tomorrow!');
+      setErrorMsg('Daily allowance limit (50/50) reached for today. Try again tomorrow!');
       return;
     }
 
