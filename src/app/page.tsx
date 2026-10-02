@@ -7,6 +7,8 @@ import { DurationOption, LanguageOption, ToneOption, ShowResponse } from '@/type
 import { Radio, History, Trash2, Clock, Globe, AlertCircle } from 'lucide-react';
 import { saveUserShow, getUserShows, deleteUserShow } from '@/lib/clientDb';
 
+const DAILY_LIMIT = 50;
+
 export default function Home() {
   const [topic, setTopic] = useState('The Future of AI and Daily Life');
   const [duration, setDuration] = useState<DurationOption>(3);
@@ -16,7 +18,7 @@ export default function Home() {
   const [currentShow, setCurrentShow] = useState<ShowResponse | null>(null);
   const [history, setHistory] = useState<ShowResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [dailyAllowance, setDailyAllowance] = useState(3);
+  const [dailyAllowance, setDailyAllowance] = useState(DAILY_LIMIT);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,8 +29,8 @@ export default function Home() {
 
       if (savedDate !== today) {
         localStorage.setItem('ai_radio_last_date', today);
-        localStorage.setItem('ai_radio_allowance', '3');
-        setDailyAllowance(3);
+        localStorage.setItem('ai_radio_allowance', DAILY_LIMIT.toString());
+        setDailyAllowance(DAILY_LIMIT);
       } else {
         const savedAllowance = localStorage.getItem('ai_radio_allowance');
         if (savedAllowance !== null) {
@@ -54,7 +56,7 @@ export default function Home() {
   const handleGenerate = async () => {
     if (!topic.trim()) return;
     if (dailyAllowance <= 0) {
-      setErrorMsg('Daily allowance limit (3/3) reached for today. Try again tomorrow!');
+      setErrorMsg(`Daily allowance limit (${DAILY_LIMIT}/${DAILY_LIMIT}) reached for today. Try again tomorrow!`);
       return;
     }
 

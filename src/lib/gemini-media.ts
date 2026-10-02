@@ -99,34 +99,44 @@ function generateSyntheticMusicLoop(): Buffer {
 }
 
 export async function mixVoiceAndMusic(voiceBuffer: Buffer, musicBuffer: Buffer): Promise<Buffer> {
-  // Pure JavaScript in-memory mixing / concatenation to ensure Vercel / serverless compatibility
   try {
     if (!voiceBuffer || voiceBuffer.length < 44) return musicBuffer || voiceBuffer;
     if (!musicBuffer || musicBuffer.length < 44) return voiceBuffer;
 
-    // Read voice PCM data (skipping 44-byte WAV header if present)
+    // Verify voice buffer is valid 16-bit PCM WAV
     const isVoiceWav = voiceBuffer.toString('utf8', 0, 4) === 'RIFF';
-    const voicePcm = isVoiceWav ? voiceBuffer.subarray(44) : voiceBuffer;
+    if (!isVoiceWav) return voiceBuffer;
 
-    // Read music PCM data
+    // Verify music buffer is valid WAV before attempting PCM sample mixing
     const isMusicWav = musicBuffer.toString('utf8', 0, 4) === 'RIFF';
-    const musicPcm = isMusicWav ? musicBuffer.subarray(44) : musicBuffer;
+    if (!isMusicWav) {
+      // Lyria or external API returned encoded MP3 rather than PCM WAV, return clean voice buffer
+      return voiceBuffer;
+    }
 
-    const numSamples = Math.floor(voicePcm.length / 2);
-    const mixedPcm = Buffer.alloc(voicePcm.length);
+    const voicePcm = voiceBuffer.subarray(44);
+    const musicPcm = musicBuffer.subarray(44);
+
+    const numVoiceSamples = Math.floor(voicePcm.length / 2);
+    const numMusicSamples = Math.floor(musicPcm.length / 2);
+
+    if (numVoiceSamples === 0) return voiceBuffer;
+    if (numMusicSamples === 0) return voiceBuffer;
+
+    const mixedPcm = Buffer.alloc(numVoiceSamples * 2);
 
     // Mix voice (full volume 1.0) and background music (lowered volume ~0.15)
-    for (let i = 0; i < numSamples; i++) {
+    for (let i = 0; i < numVoiceSamples; i++) {
       const voiceSample = voicePcm.readInt16LE(i * 2);
-      const musicIdx = (i * 2) % (musicPcm.length - 1);
-      const musicSample = musicPcm.length > 2 ? musicPcm.readInt16LE(musicIdx) : 0;
+      const musicSampleIdx = i % numMusicSamples;
+      const musicSample = musicPcm.readInt16LE(musicSampleIdx * 2);
 
       const mixed = Math.max(-32768, Math.min(32767, Math.floor(voiceSample + musicSample * 0.15)));
       mixedPcm.writeInt16LE(mixed, i * 2);
     }
 
     // Build mixed WAV header
-    const sampleRate = isVoiceWav ? voiceBuffer.readUInt32LE(24) : 24000;
+    const sampleRate = voiceBuffer.readUInt32LE(24) || 24000;
     const header = Buffer.alloc(44);
     const fileSize = 44 + mixedPcm.length;
 

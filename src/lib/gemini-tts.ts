@@ -101,7 +101,7 @@ export async function generateTTSSpeech(
           }
 
           if (pcmOrWavData) {
-            segmentBuffers.push(pcmOrWavData);
+            segmentBuffers.push(processAudioPcm(pcmOrWavData, 24000));
           }
         } catch (lineErr) {
           console.warn(`TTS generation failed for line "${line.text.substring(0, 30)}...":`, lineErr);
@@ -118,6 +118,97 @@ export async function generateTTSSpeech(
 
   // Fallback synthetic audio generator
   return generateSyntheticAudioBuffer(spokenLines.length);
+}
+
+/**
+ * Process PCM 16-bit audio:
+ * - Apply noise gate (silence samples with abs(normalizedSample) < 0.02)
+ * - Normalize peak amplitude to 0.9
+ * - Apply 10ms fade-in and 10ms fade-out at specified sample rate
+ */
+function processAudioPcm(buffer: Buffer, defaultSampleRate = 24000): Buffer {
+  let pcmData: Buffer;
+  let hasHeader = false;
+  let sampleRate = defaultSampleRate;
+  let header = Buffer.alloc(0);
+
+  if (buffer.length >= 44 && buffer.toString('utf8', 0, 4) === 'RIFF') {
+    hasHeader = true;
+    sampleRate = buffer.readUInt32LE(24) || sampleRate;
+
+    let dataOffset = 36;
+    while (dataOffset < buffer.length - 8) {
+      if (buffer.toString('utf8', dataOffset, dataOffset + 4) === 'data') {
+        const chunkLength = buffer.readUInt32LE(dataOffset + 4);
+        const pcmStart = dataOffset + 8;
+        const pcmEnd = Math.min(buffer.length, pcmStart + chunkLength);
+        pcmData = Buffer.from(buffer.subarray(pcmStart, pcmEnd));
+        header = Buffer.from(buffer.subarray(0, pcmStart));
+        break;
+      }
+      dataOffset += 1;
+    }
+
+    if (!pcmData!) {
+      pcmData = Buffer.from(buffer.subarray(44));
+      header = Buffer.from(buffer.subarray(0, 44));
+    }
+  } else {
+    pcmData = Buffer.from(buffer);
+  }
+
+  const numSamples = Math.floor(pcmData.length / 2);
+  if (numSamples === 0) return buffer;
+
+  const samples = new Float32Array(numSamples);
+  let maxPeak = 0;
+
+  // Read 16-bit samples and normalize to [-1, 1]
+  for (let i = 0; i < numSamples; i++) {
+    let sample = pcmData.readInt16LE(i * 2) / 32768;
+
+    // 1. Noise gate: if abs(sample) < 0.02 then 0
+    if (Math.abs(sample) < 0.02) {
+      sample = 0;
+    }
+
+    samples[i] = sample;
+    const absVal = Math.abs(sample);
+    if (absVal > maxPeak) {
+      maxPeak = absVal;
+    }
+  }
+
+  // 2. Normalize to 0.9 peak amplitude
+  if (maxPeak > 0) {
+    const scale = 0.9 / maxPeak;
+    for (let i = 0; i < numSamples; i++) {
+      samples[i] *= scale;
+    }
+  }
+
+  // 3. Apply 10ms fade-in and 10ms fade-out
+  const fadeSamples = Math.floor(sampleRate * 0.010); // 10ms
+  const maxFade = Math.min(fadeSamples, Math.floor(numSamples / 2));
+
+  for (let i = 0; i < maxFade; i++) {
+    const factor = i / maxFade;
+    samples[i] *= factor;
+    samples[numSamples - 1 - i] *= factor;
+  }
+
+  // Convert back to 16-bit Int PCM Buffer
+  const processedPcm = Buffer.alloc(pcmData.length);
+  for (let i = 0; i < numSamples; i++) {
+    const int16Val = Math.max(-32768, Math.min(32767, Math.floor(samples[i] * 32767)));
+    processedPcm.writeInt16LE(int16Val, i * 2);
+  }
+
+  if (hasHeader && header.length >= 44) {
+    return Buffer.concat([header, processedPcm]);
+  }
+
+  return processedPcm;
 }
 
 function combineWavBuffers(buffers: Buffer[]): Buffer {
@@ -218,5 +309,5 @@ function generateSyntheticAudioBuffer(linesCount: number): Buffer {
     buffer.writeInt16LE(int16Val, 44 + i * 2);
   }
 
-  return buffer;
+  return processAudioPcm(buffer, sampleRate);
 }
