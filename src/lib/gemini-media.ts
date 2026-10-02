@@ -1,31 +1,51 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import { GoogleGenAI } from '@google/genai';
 
-const execAsync = promisify(exec);
+interface InteractionItem {
+  type?: string;
+  mime_type?: string;
+  data?: string;
+  [key: string]: unknown;
+}
+
+interface InteractionStep {
+  content?: InteractionItem[];
+  [key: string]: unknown;
+}
+
+interface InteractionResult {
+  steps?: InteractionStep[];
+  [key: string]: unknown;
+}
 
 export async function generateBackgroundMusic(topic: string, tone: string): Promise<Buffer> {
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (apiKey) {
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/lyria-3.5:generateAudio?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: `upbeat ambient talk radio background music loop for ${topic}, tone ${tone}, smooth soft low volume synth lounge beats`,
-            durationSeconds: 30,
-          }),
-        }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        if (data.audioContent) {
-          return Buffer.from(data.audioContent, 'base64');
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `Create a 30-second subtle ambient talk radio show intro track for topic: ${topic}, tone: ${tone}. Clean synths, warm beats, instrumental only.`;
+
+      const interaction = (await ai.interactions.create({
+        model: 'lyria-3-clip-preview',
+        input: prompt,
+        store: false,
+      })) as unknown as InteractionResult;
+
+      if (interaction.steps) {
+        for (const step of interaction.steps) {
+          for (const item of step.content || []) {
+            const itemType = item.type || '';
+            const mimeType = item.mime_type || '';
+            if (
+              itemType === 'audio' ||
+              (typeof mimeType === 'string' && mimeType.startsWith('audio/'))
+            ) {
+              const base64Data = item.data;
+              if (base64Data) {
+                return Buffer.from(base64Data, 'base64');
+              }
+            }
+          }
         }
       }
     } catch (err) {
@@ -37,7 +57,7 @@ export async function generateBackgroundMusic(topic: string, tone: string): Prom
 }
 
 function generateSyntheticMusicLoop(): Buffer {
-  const sampleRate = 44100;
+  const sampleRate = 24000;
   const durationSeconds = 15;
   const numSamples = sampleRate * durationSeconds;
   const dataSize = numSamples * 2;
@@ -79,62 +99,97 @@ function generateSyntheticMusicLoop(): Buffer {
 }
 
 export async function mixVoiceAndMusic(voiceBuffer: Buffer, musicBuffer: Buffer): Promise<Buffer> {
-  const tmpDir = os.tmpdir();
-  const timestamp = Date.now();
-  const voicePath = path.join(tmpDir, `voice_${timestamp}.wav`);
-  const musicPath = path.join(tmpDir, `music_${timestamp}.wav`);
-  const outputPath = path.join(tmpDir, `output_${timestamp}.mp3`);
-
+  // Pure JavaScript in-memory mixing / concatenation to ensure Vercel / serverless compatibility
   try {
-    await fs.promises.writeFile(voicePath, voiceBuffer);
-    await fs.promises.writeFile(musicPath, musicBuffer);
+    if (!voiceBuffer || voiceBuffer.length < 44) return musicBuffer || voiceBuffer;
+    if (!musicBuffer || musicBuffer.length < 44) return voiceBuffer;
 
-    // Mix voice audio + music loop at low volume (volume=0.2 for music, stream loop) using ffmpeg
-    const cmd = `ffmpeg -y -i "${voicePath}" -stream_loop -1 -i "${musicPath}" -filter_complex "[1:a]volume=0.18[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=2[out]" -map "[out]" -b:a 192k "${outputPath}"`;
+    // Read voice PCM data (skipping 44-byte WAV header if present)
+    const isVoiceWav = voiceBuffer.toString('utf8', 0, 4) === 'RIFF';
+    const voicePcm = isVoiceWav ? voiceBuffer.subarray(44) : voiceBuffer;
 
-    await execAsync(cmd);
+    // Read music PCM data
+    const isMusicWav = musicBuffer.toString('utf8', 0, 4) === 'RIFF';
+    const musicPcm = isMusicWav ? musicBuffer.subarray(44) : musicBuffer;
 
-    const resultBuffer = await fs.promises.readFile(outputPath);
+    const numSamples = Math.floor(voicePcm.length / 2);
+    const mixedPcm = Buffer.alloc(voicePcm.length);
 
-    // Cleanup temp files asynchronously
-    Promise.all([
-      fs.promises.unlink(voicePath).catch(() => {}),
-      fs.promises.unlink(musicPath).catch(() => {}),
-      fs.promises.unlink(outputPath).catch(() => {}),
-    ]);
+    // Mix voice (full volume 1.0) and background music (lowered volume ~0.15)
+    for (let i = 0; i < numSamples; i++) {
+      const voiceSample = voicePcm.readInt16LE(i * 2);
+      const musicIdx = (i * 2) % (musicPcm.length - 1);
+      const musicSample = musicPcm.length > 2 ? musicPcm.readInt16LE(musicIdx) : 0;
 
-    return resultBuffer;
+      const mixed = Math.max(-32768, Math.min(32767, Math.floor(voiceSample + musicSample * 0.15)));
+      mixedPcm.writeInt16LE(mixed, i * 2);
+    }
+
+    // Build mixed WAV header
+    const sampleRate = isVoiceWav ? voiceBuffer.readUInt32LE(24) : 24000;
+    const header = Buffer.alloc(44);
+    const fileSize = 44 + mixedPcm.length;
+
+    header.write('RIFF', 0);
+    header.writeUInt32LE(fileSize - 8, 4);
+    header.write('WAVE', 8);
+
+    header.write('fmt ', 12);
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20); // PCM
+    header.writeUInt16LE(1, 22); // Mono
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE(sampleRate * 2, 28);
+    header.writeUInt16LE(2, 32);
+    header.writeUInt16LE(16, 34);
+
+    header.write('data', 36);
+    header.writeUInt32LE(mixedPcm.length, 40);
+
+    return Buffer.concat([header, mixedPcm]);
   } catch (err) {
-    console.warn('ffmpeg mixing failed, returning voice buffer directly:', err);
+    console.warn('In-memory voice & music mixing failed, returning voice buffer directly:', err);
     return voiceBuffer;
   }
 }
 
 export async function generateCoverArt(topic: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
-  const prompt = `radio show cover art for ${topic}`;
 
   if (apiKey) {
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            instances: [{ prompt }],
-            parameters: { sampleCount: 1, aspectRatio: '1:1' },
-          }),
-        }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        if (data.predictions?.[0]?.bytesBase64Encoded) {
-          return `data:image/png;base64,${data.predictions[0].bytesBase64Encoded}`;
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `A professional podcast cover image for a show titled "${topic}" on "AI Talk Radio". Vibrant background, clean aesthetic, 1:1 aspect ratio.`;
+
+      const createParams = {
+        model: 'gemini-3.1-flash-image',
+        input: prompt,
+        response_format: { type: 'image' },
+      };
+
+      const interaction = (await ai.interactions.create(
+        createParams as unknown as Parameters<typeof ai.interactions.create>[0]
+      )) as unknown as InteractionResult;
+
+      if (interaction.steps) {
+        for (const step of interaction.steps) {
+          for (const item of step.content || []) {
+            const itemType = item.type || '';
+            const mimeType = item.mime_type || '';
+            if (
+              itemType === 'image' ||
+              (typeof mimeType === 'string' && mimeType.startsWith('image/'))
+            ) {
+              const base64Data = item.data;
+              if (base64Data) {
+                return `data:${mimeType || 'image/png'};base64,${base64Data}`;
+              }
+            }
+          }
         }
       }
     } catch (err) {
-      console.warn('Imagen API failed, returning generated visual cover art:', err);
+      console.warn('Gemini Flash Image generation failed, returning generated SVG visual cover art:', err);
     }
   }
 

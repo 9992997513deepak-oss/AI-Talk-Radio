@@ -2,6 +2,22 @@ import { GoogleGenAI } from '@google/genai';
 import { buildScriptPrompt } from '@/lib/prompts';
 import { GenerateShowRequest, ScriptDialogueLine } from '@/types/radio';
 
+interface InteractionStepContent {
+  text?: string;
+  [key: string]: unknown;
+}
+
+interface InteractionStep {
+  content?: InteractionStepContent[];
+  [key: string]: unknown;
+}
+
+interface InteractionResult {
+  steps?: InteractionStep[];
+  text?: string;
+  [key: string]: unknown;
+}
+
 export async function generateRadioScript(req: GenerateShowRequest): Promise<{ script: string; dialogue: ScriptDialogueLine[]; wordCount: number }> {
   const apiKey = process.env.GEMINI_API_KEY;
   const prompt = buildScriptPrompt(req.topic, req.duration, req.language, req.tone);
@@ -9,13 +25,34 @@ export async function generateRadioScript(req: GenerateShowRequest): Promise<{ s
   if (apiKey) {
     try {
       const ai = new GoogleGenAI({ apiKey });
-      // Using gemini-2.5-flash or gemini-3.0-flash endpoint per SDK guidelines
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      });
+      let scriptText = '';
 
-      const scriptText = response.text || '';
+      try {
+        // Try Interactions API with gemini-3-flash-preview
+        const interaction = (await ai.interactions.create({
+          model: 'gemini-3-flash-preview',
+          input: prompt,
+        })) as unknown as InteractionResult;
+
+        if (interaction.steps && interaction.steps.length > 0) {
+          const lastStep = interaction.steps[interaction.steps.length - 1];
+          if (lastStep.content && lastStep.content.length > 0) {
+            scriptText = lastStep.content[0].text || '';
+          }
+        }
+        if (!scriptText && interaction.text) {
+          scriptText = interaction.text;
+        }
+      } catch (interError) {
+        console.warn('Interactions API script generation failed, trying generateContent fallback:', interError);
+        // Fallback to generateContent
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+        scriptText = response.text || '';
+      }
+
       if (scriptText) {
         const wordCount = scriptText.trim().split(/\s+/).length;
         const dialogue = parseScriptDialogue(scriptText);
@@ -30,7 +67,7 @@ export async function generateRadioScript(req: GenerateShowRequest): Promise<{ s
   return generateFallbackScript(req);
 }
 
-function parseScriptDialogue(scriptText: string): ScriptDialogueLine[] {
+export function parseScriptDialogue(scriptText: string): ScriptDialogueLine[] {
   const lines = scriptText.split('\n');
   const dialogue: ScriptDialogueLine[] = [];
 
