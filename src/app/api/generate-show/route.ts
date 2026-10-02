@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateRadioScript } from '@/lib/gemini-script'
 import { generateTTSSpeech } from '@/lib/gemini-tts'
-import { generateBackgroundMusic, mixVoiceAndMusic, generateCoverArt } from '@/lib/gemini-media'
+import { generateCoverArt } from '@/lib/gemini-media'
 import { GenerateShowRequest, ShowResponse } from '@/types/radio'
 
 export async function POST(req: NextRequest) {
@@ -22,40 +22,24 @@ export async function POST(req: NextRequest) {
       tone,
     }
 
-    // Step A & B: Script generation using Gemini
-    console.log('[API Debug] Step A: Generating script...')
+    // Step A: Script generation using Gemini 3.0 Flash
+    console.log('[API Debug] Step A: Generating radio script...')
     const { script, dialogue, wordCount } = await generateRadioScript(requestPayload)
-    console.log(`[API Debug] Script generated. Lines count: ${dialogue.length}, total words: ${wordCount}`)
+    console.log(`[API Debug] Script generated successfully. Dialogue lines: ${dialogue.length}, total words: ${wordCount}`)
 
-    // Step C: Speech audio generation via Gemini TTS
-    console.log('[API Debug] Step B: Synthesizing TTS speech audio...')
+    // Step B: Speech audio generation via Gemini TTS
+    console.log('[API Debug] Step B: Generating speech audio via Gemini TTS API...')
     const ttsResult = await generateTTSSpeech(dialogue, language)
     const voiceBuffer = ttsResult.buffer
-    let finalMimeType = ttsResult.mimeType || 'audio/wav'
-    console.log(`[API Debug] TTS speech generated. Buffer size: ${voiceBuffer.length} bytes, mimeType: ${finalMimeType}`)
+    const mimeType = ttsResult.mimeType || 'audio/wav'
+    console.log(`[API Debug] TTS speech generated successfully. Buffer size: ${voiceBuffer.length} bytes, mimeType: ${mimeType}`)
 
-    let finalAudioBuffer = voiceBuffer
+    // Directly encode clean speech audio without background mixing
+    const base64Audio = voiceBuffer.toString('base64')
+    const audioUrl = `data:${mimeType};base64,${base64Audio}`
 
-    // Step D & E: Lyria background music loop & mixing (with clean TTS audio fallback)
-    try {
-      console.log('[API Debug] Step C: Attempting background music generation...')
-      const musicBuffer = await generateBackgroundMusic(topic, tone)
-      console.log(`[API Debug] Background music generated. Buffer size: ${musicBuffer.length} bytes`)
-
-      console.log('[API Debug] Step D: Mixing speech voice + music...')
-      finalAudioBuffer = await mixVoiceAndMusic(voiceBuffer, musicBuffer)
-      finalMimeType = 'audio/mp3'
-      console.log(`[API Debug] Audio mix complete. Final buffer size: ${finalAudioBuffer.length} bytes`)
-    } catch (musicErr) {
-      console.warn('[API Warning] Background music generation/mixing failed. Proceeding with clean TTS audio:', musicErr)
-      finalAudioBuffer = voiceBuffer
-    }
-
-    const base64Audio = finalAudioBuffer.toString('base64')
-    const audioUrl = `data:${finalMimeType};base64,${base64Audio}`
-
-    // Step F: Cover Art Generation ("radio show cover art for [topic]")
-    console.log('[API Debug] Step E: Generating cover art...')
+    // Step C: Cover Art Generation ("radio show cover art for [topic]")
+    console.log('[API Debug] Step C: Generating cover art...')
     const coverImageUrl = await generateCoverArt(topic)
 
     const responseData: ShowResponse = {
@@ -72,7 +56,7 @@ export async function POST(req: NextRequest) {
       createdAt: new Date().toISOString(),
     }
 
-    console.log('[API Debug] Show generation successful. ID:', responseData.id)
+    console.log('[API Debug] Show generation complete. ID:', responseData.id)
     return NextResponse.json(responseData)
   } catch (error: unknown) {
     console.error('[API Error] Critical failure in generate-show route:', error)

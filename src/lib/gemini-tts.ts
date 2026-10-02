@@ -14,17 +14,17 @@ export async function generateTTSSpeech(
     .map((line) => `${line.speaker}: ${line.text}`)
     .join('\n\n');
 
-  console.log('[TTS Debug] Requesting speech for language:', language, '| Voice:', voice, '| Code:', languageCode);
+  console.log('[TTS Debug] Language:', language, '| Selected Voice:', voice, '| Code:', languageCode);
   console.log('[TTS Debug] Spoken text length:', spokenText.length);
 
   if (apiKey) {
-    // 1. Try gemini-2.5-flash-preview-tts model via GoogleGenAI SDK
+    // 1. Try Gemini 3.1 Flash / 2.5 TTS model via GoogleGenAI SDK
     try {
       const ai = new GoogleGenAI({ apiKey });
-      console.log('[TTS Debug] Requesting audio generation via gemini-2.5-flash-preview-tts...');
+      console.log('[TTS Debug] Calling GoogleGenAI SDK for TTS audio...');
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-preview-tts',
-        contents: `Read the following radio transcript aloud clearly in a natural radio host voice:\n\n${spokenText}`,
+        contents: `Read the following radio transcript aloud in a clear, engaging radio voice:\n\n${spokenText}`,
         config: {
           responseModalities: ['AUDIO'],
           speechConfig: {
@@ -43,7 +43,7 @@ export async function generateTTSSpeech(
         if (parts) {
           for (const part of parts) {
             if (part.inlineData?.data) {
-              console.log('[TTS Debug] Successfully received audio data from gemini-2.5-flash-preview-tts');
+              console.log('[TTS Debug] Successfully received audio data from Gemini TTS API');
               return {
                 buffer: Buffer.from(part.inlineData.data, 'base64'),
                 mimeType: part.inlineData.mimeType || 'audio/mp3',
@@ -53,10 +53,10 @@ export async function generateTTSSpeech(
         }
       }
     } catch (err) {
-      console.warn('[TTS Warning] gemini-2.5-flash-preview-tts SDK attempt failed, trying REST fallback:', err);
+      console.warn('[TTS Warning] SDK audio call error, attempting REST fallback endpoints:', err);
     }
 
-    // 2. Try REST fallback calls with gemini-2.5-flash-preview-tts / gemini-2.5-flash
+    // 2. REST Fallback endpoints
     const endpoints = [
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -69,7 +69,7 @@ export async function generateTTSSpeech(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: `Read aloud clearly in a natural radio voice:\n\n${spokenText}` }] }],
+            contents: [{ parts: [{ text: `Read aloud clearly in a natural radio host voice:\n\n${spokenText}` }] }],
             generationConfig: {
               responseModalities: ['AUDIO'],
               speechConfig: {
@@ -93,16 +93,19 @@ export async function generateTTSSpeech(
               mimeType: inlineData.mimeType || 'audio/mp3',
             };
           }
+        } else {
+          const errText = await restResponse.text();
+          console.warn(`[TTS Warning] REST endpoint returned status ${restResponse.status}:`, errText);
         }
       } catch (restErr) {
         console.warn('[TTS Warning] REST endpoint error:', restErr);
       }
     }
   } else {
-    console.warn('[TTS Warning] GEMINI_API_KEY is not set.');
+    console.warn('[TTS Warning] GEMINI_API_KEY is missing.');
   }
 
-  console.log('[TTS Debug] Generating clean synthetic WAV audio buffer as fallback.');
+  console.log('[TTS Debug] Generating clean synthetic audio buffer.');
   return {
     buffer: generateSyntheticAudioBuffer(dialogue.length),
     mimeType: 'audio/wav',

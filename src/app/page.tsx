@@ -78,10 +78,22 @@ export default function Home() {
       const showData = (await res.json()) as ShowResponse;
       setCurrentShow(showData);
 
-      // Update history & daily allowance in localStorage
-      const updatedHistory = [showData, ...history.slice(0, 9)];
+      // Save history to localStorageWITHOUT huge audioUrl base64 payload to prevent DOMException QuotaExceededError
+      const lightShowItem: ShowResponse = {
+        ...showData,
+        audioUrl: '', // Omit heavy audio base64 in local storage
+      };
+
+      const updatedHistory = [showData, ...history.filter(h => h.id !== showData.id).slice(0, 9)];
       setHistory(updatedHistory);
-      localStorage.setItem('ai_radio_history', JSON.stringify(updatedHistory));
+
+      const storageHistory = [lightShowItem, ...history.map(h => ({ ...h, audioUrl: '' })).slice(0, 9)];
+      try {
+        localStorage.setItem('ai_radio_history', JSON.stringify(storageHistory));
+      } catch (quotaErr) {
+        console.warn('LocalStorage quota exceeded, clearing older items:', quotaErr);
+        localStorage.setItem('ai_radio_history', JSON.stringify([lightShowItem]));
+      }
 
       const newAllowance = Math.max(0, dailyAllowance - 1);
       setDailyAllowance(newAllowance);
@@ -96,7 +108,11 @@ export default function Home() {
 
   const clearHistory = () => {
     setHistory([]);
-    localStorage.removeItem('ai_radio_history');
+    try {
+      localStorage.removeItem('ai_radio_history');
+    } catch (e) {
+      console.warn('Error clearing localStorage history:', e);
+    }
   };
 
   return (
