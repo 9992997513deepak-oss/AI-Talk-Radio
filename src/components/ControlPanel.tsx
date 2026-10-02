@@ -59,7 +59,7 @@ export function ControlPanel({
         {/* Daily Allowance Badge */}
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-800 text-xs font-medium text-slate-300">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-          <span>Daily allowance <strong className="text-indigo-400">{dailyAllowance}/3</strong></span>
+          <span>Daily allowance <strong className="text-indigo-400">{dailyAllowance}/50</strong></span>
         </div>
       </div>
 
