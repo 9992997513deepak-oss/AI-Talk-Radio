@@ -11,25 +11,29 @@ export async function generateBackgroundMusic(topic: string, tone: string): Prom
 
   if (apiKey) {
     try {
+      // Standard generateContent request with prompt for audio music track
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/lyria-3.5:generateAudio?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            prompt: `upbeat ambient talk radio background music loop for ${topic}, tone ${tone}, smooth soft low volume synth lounge beats`,
-            durationSeconds: 30,
+            contents: [{ parts: [{ text: `Generate a 15-second upbeat background music beat for a talk radio show on ${topic}, tone ${tone}` }] }],
+            generationConfig: {
+              responseModalities: ['AUDIO'],
+            },
           }),
         }
       );
       if (response.ok) {
         const data = await response.json();
-        if (data.audioContent) {
-          return Buffer.from(data.audioContent, 'base64');
+        const inlineData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+        if (inlineData?.data) {
+          return Buffer.from(inlineData.data, 'base64');
         }
       }
     } catch (err) {
-      console.warn('Lyria API call failed, generating synthetic background music loop:', err);
+      console.warn('[Music Warning] Background music API generation failed, generating synthetic loop:', err);
     }
   }
 
@@ -64,11 +68,11 @@ function generateSyntheticMusicLoop(): Buffer {
   // Gentle rhythmic ambient music background loop
   for (let i = 0; i < numSamples; i++) {
     const t = i / sampleRate;
-    const beat = Math.sin(2 * Math.PI * 2 * t); // 120 BPM pulse
+    const beat = Math.sin(2 * Math.PI * 2 * t);
     const synthPad =
-      Math.sin(2 * Math.PI * 130.81 * t) * 0.12 + // C3
-      Math.sin(2 * Math.PI * 164.81 * t) * 0.08 + // E3
-      Math.sin(2 * Math.PI * 196.00 * t) * 0.08;  // G3
+      Math.sin(2 * Math.PI * 130.81 * t) * 0.12 +
+      Math.sin(2 * Math.PI * 164.81 * t) * 0.08 +
+      Math.sin(2 * Math.PI * 196.00 * t) * 0.08;
 
     const sampleVal = synthPad * (0.6 + 0.4 * beat);
     const int16Val = Math.floor(sampleVal * 32767);
@@ -89,14 +93,14 @@ export async function mixVoiceAndMusic(voiceBuffer: Buffer, musicBuffer: Buffer)
     await fs.promises.writeFile(voicePath, voiceBuffer);
     await fs.promises.writeFile(musicPath, musicBuffer);
 
-    // Mix voice audio + music loop at low volume (volume=0.2 for music, stream loop) using ffmpeg
+    // Mix voice audio + music loop at low volume (volume=0.18 for music) using ffmpeg
     const cmd = `ffmpeg -y -i "${voicePath}" -stream_loop -1 -i "${musicPath}" -filter_complex "[1:a]volume=0.18[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=2[out]" -map "[out]" -b:a 192k "${outputPath}"`;
 
     await execAsync(cmd);
 
     const resultBuffer = await fs.promises.readFile(outputPath);
 
-    // Cleanup temp files asynchronously
+    // Cleanup temp files
     Promise.all([
       fs.promises.unlink(voicePath).catch(() => {}),
       fs.promises.unlink(musicPath).catch(() => {}),
@@ -105,7 +109,7 @@ export async function mixVoiceAndMusic(voiceBuffer: Buffer, musicBuffer: Buffer)
 
     return resultBuffer;
   } catch (err) {
-    console.warn('ffmpeg mixing failed, returning voice buffer directly:', err);
+    console.warn('[Audio Mix Warning] ffmpeg execution unavailable or failed; proceeding with clean TTS voice audio:', err);
     return voiceBuffer;
   }
 }
