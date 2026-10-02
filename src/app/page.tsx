@@ -5,6 +5,7 @@ import { ControlPanel } from '@/components/ControlPanel';
 import { RadioPlayer } from '@/components/RadioPlayer';
 import { DurationOption, LanguageOption, ToneOption, ShowResponse } from '@/types/radio';
 import { Radio, History, Trash2, Clock, Globe, AlertCircle } from 'lucide-react';
+import { saveUserShow, getUserShows, deleteUserShow } from '@/lib/clientDb';
 
 export default function Home() {
   const [topic, setTopic] = useState('The Future of AI and Daily Life');
@@ -19,7 +20,7 @@ export default function Home() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load daily allowance & past generated shows from localStorage
+    // Load daily allowance & past generated shows from IndexedDB
     try {
       const savedDate = localStorage.getItem('ai_radio_last_date');
       const today = new Date().toDateString();
@@ -34,18 +35,20 @@ export default function Home() {
           setDailyAllowance(parseInt(savedAllowance, 10));
         }
       }
-
-      const savedHistory = localStorage.getItem('ai_radio_history');
-      if (savedHistory) {
-        const parsedHistory = JSON.parse(savedHistory) as ShowResponse[];
-        setHistory(parsedHistory);
-        if (parsedHistory.length > 0) {
-          setCurrentShow(parsedHistory[0]);
-        }
-      }
     } catch (e) {
-      console.warn('Error accessing localStorage:', e);
+      console.warn('Error accessing localStorage for allowance:', e);
     }
+
+    getUserShows()
+      .then((shows) => {
+        if (shows && shows.length > 0) {
+          setHistory(shows);
+          setCurrentShow(shows[0]);
+        }
+      })
+      .catch((err) => {
+        console.warn('Error loading history from IndexedDB:', err);
+      });
   }, []);
 
   const handleGenerate = async () => {
@@ -78,14 +81,18 @@ export default function Home() {
       const showData = (await res.json()) as ShowResponse;
       setCurrentShow(showData);
 
-      // Update history & daily allowance in localStorage
-      const updatedHistory = [showData, ...history.slice(0, 9)];
+      // Save to IndexedDB to avoid localStorage size quota limit errors
+      await saveUserShow(showData);
+      const updatedHistory = [showData, ...history.filter((s) => s.id !== showData.id).slice(0, 9)];
       setHistory(updatedHistory);
-      localStorage.setItem('ai_radio_history', JSON.stringify(updatedHistory));
 
       const newAllowance = Math.max(0, dailyAllowance - 1);
       setDailyAllowance(newAllowance);
-      localStorage.setItem('ai_radio_allowance', newAllowance.toString());
+      try {
+        localStorage.setItem('ai_radio_allowance', newAllowance.toString());
+      } catch (e) {
+        console.warn('Failed to save allowance to localStorage:', e);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'An error occurred while generating the show.';
       setErrorMsg(message);
@@ -94,9 +101,21 @@ export default function Home() {
     }
   };
 
-  const clearHistory = () => {
+  const clearHistory = async () => {
+    for (const show of history) {
+      await deleteUserShow(show.id);
+    }
     setHistory([]);
-    localStorage.removeItem('ai_radio_history');
+  };
+
+  const handleDeleteItem = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await deleteUserShow(id);
+    const updated = history.filter((s) => s.id !== id);
+    setHistory(updated);
+    if (currentShow?.id === id) {
+      setCurrentShow(updated.length > 0 ? updated[0] : null);
+    }
   };
 
   return (
@@ -169,29 +188,38 @@ export default function Home() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {history.map((show) => (
-                <button
+                <div
                   key={show.id}
                   onClick={() => setCurrentShow(show)}
-                  className={`flex items-center gap-4 p-3 rounded-xl border text-left transition ${
+                  className={`flex items-center justify-between gap-4 p-3 rounded-xl border text-left cursor-pointer transition ${
                     currentShow?.id === show.id
                       ? 'bg-indigo-950/40 border-indigo-500/50 text-slate-100'
                       : 'bg-slate-900/60 hover:bg-slate-900 border-slate-800 text-slate-300'
                   }`}
                 >
-                  <img
-                    src={show.coverImageUrl}
-                    alt={show.topic}
-                    className="w-12 h-12 rounded-lg object-cover border border-slate-700 shrink-0"
-                  />
-                  <div className="overflow-hidden space-y-1">
-                    <h4 className="text-xs font-bold text-slate-200 truncate">{show.topic}</h4>
-                    <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                      <span className="flex items-center gap-0.5"><Globe className="w-3 h-3 text-pink-400" /> {show.language}</span>
-                      <span>•</span>
-                      <span className="flex items-center gap-0.5"><Clock className="w-3 h-3 text-indigo-400" /> {show.duration} MIN</span>
+                  <div className="flex items-center gap-4 overflow-hidden">
+                    <img
+                      src={show.coverImageUrl}
+                      alt={show.topic}
+                      className="w-12 h-12 rounded-lg object-cover border border-slate-700 shrink-0"
+                    />
+                    <div className="overflow-hidden space-y-1">
+                      <h4 className="text-xs font-bold text-slate-200 truncate">{show.topic}</h4>
+                      <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                        <span className="flex items-center gap-0.5"><Globe className="w-3 h-3 text-pink-400" /> {show.language}</span>
+                        <span>•</span>
+                        <span className="flex items-center gap-0.5"><Clock className="w-3 h-3 text-indigo-400" /> {show.duration} MIN</span>
+                      </div>
                     </div>
                   </div>
-                </button>
+                  <button
+                    onClick={(e) => handleDeleteItem(e, show.id)}
+                    className="p-2 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition shrink-0"
+                    title="Delete show"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               ))}
             </div>
           </div>
