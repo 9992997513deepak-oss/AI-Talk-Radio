@@ -93,3 +93,19 @@ export async function deleteUserShow(id: string): Promise<void> {
     console.error('IndexedDB deleteUserShow failed:', err);
   }
 }
+
+export async function clearAllUserShows(): Promise<void> {
+  try {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.clear();
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (err) {
+    console.error('IndexedDB clearAllUserShows failed:', err);
+  }
+}

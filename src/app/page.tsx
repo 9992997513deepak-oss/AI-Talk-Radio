@@ -5,7 +5,7 @@ import { ControlPanel } from '@/components/ControlPanel';
 import { RadioPlayer } from '@/components/RadioPlayer';
 import { DurationOption, LanguageOption, ToneOption, ShowResponse } from '@/types/radio';
 import { Radio, History, Trash2, Clock, Globe, AlertCircle } from 'lucide-react';
-import { saveUserShow, getUserShows, deleteUserShow } from '@/lib/clientDb';
+import { saveUserShow, getUserShows, deleteUserShow, clearAllUserShows } from '@/lib/clientDb';
 
 export default function Home() {
   const [topic, setTopic] = useState('The Future of AI and Daily Life');
@@ -110,10 +110,15 @@ export default function Home() {
   };
 
   const clearHistory = async () => {
-    for (const show of history) {
-      await deleteUserShow(show.id);
+    await clearAllUserShows();
+    try {
+      localStorage.removeItem('ai_radio_last_date');
+      localStorage.removeItem('ai_radio_allowance');
+    } catch (e) {
+      console.warn('Error clearing localStorage:', e);
     }
     setHistory([]);
+    setCurrentShow(null);
   };
 
   const handleDeleteItem = async (e: React.MouseEvent, id: string) => {
