@@ -73,12 +73,20 @@ export default function Home() {
         }),
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to generate radio show');
+      const text = await res.text();
+      let data: Record<string, unknown> | null = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(text || 'Server error');
       }
 
-      const showData = (await res.json()) as ShowResponse;
+      if (!res.ok) {
+        const errorText = typeof data?.error === 'string' ? data.error : 'Failed to generate radio show';
+        throw new Error(errorText);
+      }
+
+      const showData = data as unknown as ShowResponse;
       setCurrentShow(showData);
 
       // Save to IndexedDB to avoid localStorage size quota limit errors

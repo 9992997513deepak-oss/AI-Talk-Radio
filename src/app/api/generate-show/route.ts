@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { generateRadioScript } from '@/lib/gemini-script'
 import { generateTTSSpeech } from '@/lib/gemini-tts'
 import { generateBackgroundMusic, mixVoiceAndMusic, generateCoverArt } from '@/lib/gemini-media'
@@ -51,11 +51,11 @@ export async function POST(req: NextRequest) {
       createdAt: new Date().toISOString(),
     }
 
-    return NextResponse.json(responseData)
+    return Response.json(responseData)
   } catch (error: unknown) {
     console.error('Error generating radio show:', error)
     const message = error instanceof Error ? error.message : 'Failed to generate radio show'
-    return NextResponse.json(
+    return Response.json(
       { error: message },
       { status: 500 }
     )
