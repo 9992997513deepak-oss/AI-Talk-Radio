@@ -1,6 +1,6 @@
 import { ShowResponse } from '@/types/radio';
 
-const DB_NAME = 'radio_gemini_db';
+const DB_NAME = 'radio_db';
 const STORE_NAME = 'user_shows';
 const DB_VERSION = 1;
 

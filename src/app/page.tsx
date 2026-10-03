@@ -241,7 +241,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="relative z-10 w-full py-6 text-center text-xs text-slate-500 border-t border-slate-900">
-        AI Talk Radio • Built with Next.js 14, Gemini 3.0 Flash & Gemini TTS API
+        AI Talk Radio • Built with Next.js 14 & Free Edge TTS
       </footer>
     </main>
   );

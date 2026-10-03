@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
-import { generateRadioScript } from '@/lib/gemini-script'
-import { generateTTSSpeech } from '@/lib/gemini-tts'
-import { generateBackgroundMusic, mixVoiceAndMusic, generateCoverArt } from '@/lib/gemini-media'
+import { generateRadioScript } from '@/lib/radio-script'
+import { generateTTSSpeech } from '@/lib/radio-tts'
+import { generateBackgroundMusic, mixVoiceAndMusic, generateCoverArt } from '@/lib/radio-media'
 import { GenerateShowRequest, ShowResponse } from '@/types/radio'
 
 export async function POST(req: NextRequest) {
@@ -20,21 +20,21 @@ export async function POST(req: NextRequest) {
       tone,
     }
 
-    // Step A & B: Script generation using Gemini
+    // Step A & B: Script generation
     const { script, dialogue, wordCount } = await generateRadioScript(requestPayload)
 
-    // Step C: Speech audio generation via Gemini TTS
+    // Step C: Speech audio generation via Edge TTS
     const voiceBuffer = await generateTTSSpeech(dialogue, language)
 
-    // Step D: Lyria 3.5 API background music generation
+    // Step D: Background music generation
     const musicBuffer = await generateBackgroundMusic(topic, tone)
 
-    // Step E: Voice + Background music mixing using ffmpeg
+    // Step E: Voice + Background music mixing
     const finalAudioBuffer = await mixVoiceAndMusic(voiceBuffer, musicBuffer)
     const base64Audio = finalAudioBuffer.toString('base64')
     const audioUrl = `data:audio/mp3;base64,${base64Audio}`
 
-    // Step F: Cover Art Generation ("radio show cover art for [topic]")
+    // Step F: Cover Art Generation
     const coverImageUrl = await generateCoverArt(topic)
 
     const responseData: ShowResponse = {

@@ -52,7 +52,7 @@ export function ControlPanel({
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-100 tracking-tight">Generate a radio show</h1>
-            <p className="text-xs text-slate-400">Powered by Gemini 3.0 Flash & Gemini TTS</p>
+            <p className="text-xs text-slate-400">Powered by Free Edge TTS & Local AI Radio</p>
           </div>
         </div>
 

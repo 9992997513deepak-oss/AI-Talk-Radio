@@ -1,70 +1,7 @@
-import { GoogleGenAI } from '@google/genai';
-import { buildScriptPrompt } from '@/lib/prompts';
 import { GenerateShowRequest, ScriptDialogueLine } from '@/types/radio';
 
-interface InteractionStepContent {
-  text?: string;
-  [key: string]: unknown;
-}
-
-interface InteractionStep {
-  content?: InteractionStepContent[];
-  [key: string]: unknown;
-}
-
-interface InteractionResult {
-  steps?: InteractionStep[];
-  text?: string;
-  [key: string]: unknown;
-}
-
 export async function generateRadioScript(req: GenerateShowRequest): Promise<{ script: string; dialogue: ScriptDialogueLine[]; wordCount: number }> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  const prompt = buildScriptPrompt(req.topic, req.duration, req.language, req.tone);
-
-  if (apiKey) {
-    try {
-      const ai = new GoogleGenAI({ apiKey });
-      let scriptText = '';
-
-      try {
-        // Try Interactions API with gemini-3-flash-preview
-        const interaction = (await ai.interactions.create({
-          model: 'gemini-3-flash-preview',
-          input: prompt,
-        })) as unknown as InteractionResult;
-
-        if (interaction.steps && interaction.steps.length > 0) {
-          const lastStep = interaction.steps[interaction.steps.length - 1];
-          if (lastStep.content && lastStep.content.length > 0) {
-            scriptText = lastStep.content[0].text || '';
-          }
-        }
-        if (!scriptText && interaction.text) {
-          scriptText = interaction.text;
-        }
-      } catch (interError) {
-        console.warn('Interactions API script generation failed, trying generateContent fallback:', interError);
-        // Fallback to generateContent
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-        });
-        scriptText = response.text || '';
-      }
-
-      if (scriptText) {
-        const wordCount = scriptText.trim().split(/\s+/).length;
-        const dialogue = parseScriptDialogue(scriptText);
-        return { script: scriptText, dialogue, wordCount };
-      }
-    } catch (err) {
-      console.warn('Gemini API call failed, falling back to smart generated template:', err);
-    }
-  }
-
-  // Fallback high-quality mock script generator if API key is not present or API call fails
-  return generateFallbackScript(req);
+  return generateLocalScript(req);
 }
 
 export function parseScriptDialogue(scriptText: string): ScriptDialogueLine[] {
@@ -97,7 +34,7 @@ export function parseScriptDialogue(scriptText: string): ScriptDialogueLine[] {
   return dialogue;
 }
 
-function generateFallbackScript(req: GenerateShowRequest): { script: string; dialogue: ScriptDialogueLine[]; wordCount: number } {
+function generateLocalScript(req: GenerateShowRequest): { script: string; dialogue: ScriptDialogueLine[]; wordCount: number } {
   const targetWords = req.duration * 150;
 
   let intro = '';
@@ -105,7 +42,7 @@ function generateFallbackScript(req: GenerateShowRequest): { script: string; dia
   let outro = '';
 
   if (req.language === 'Hindi') {
-    intro = `[MUSIC CUE: RADIO SHOW INTRO JINGLE]\nHost: नमस्कार दोस्तों! 'AI टॉक्स' में आपका स्वागत है। आज का हमारा बेहद दिलचस्प विषय है "${req.topic}"।`;
+    intro = `[MUSIC CUE: RADIO SHOW INTRO JINGLE]\nHost: नमस्कार दोस्तों! AI टॉक्स में आपका स्वागत है। आज का हमारा बेहद दिलचस्प विषय है "${req.topic}"।`;
     body = `Co-Host: जी बिल्कुल! आज हम "${req.topic}" के हर पहलू पर चर्चा करेंगे। ${req.tone} तरीके से इस विषय को समझना बहुत जरूरी है।\nHost: सही कहा। जब हम इस विषय पर गहराई से सोचते हैं, तो हमें कई नई बातें सीखने को मिलती हैं। इस ${req.duration} मिनट के शो में हम सभी मुख्य बातों को कवर करेंगे।\n[MUSIC CUE: SOFT BACKGROUND TRACK]\nCo-Host: दर्शक भी इस विषय के बारे में हमेशा उत्सुक रहते हैं। आइए इसके मुख्य फायदों और चुनौतियों पर नज़र डालते हैं।`;
     outro = `Host: तो यह था आज का विशेष एपिसोड "${req.topic}" पर। सुनने के लिए बहुत-बहुत धन्यवाद! सुनते रहिए AI Talk Radio।\n[MUSIC CUE: OUTRO JINGLE]`;
   } else if (req.language === 'Hinglish') {
@@ -118,7 +55,6 @@ function generateFallbackScript(req: GenerateShowRequest): { script: string; dia
     outro = `Host: Thank you for tuning in to this special segment on "${req.topic}". Stay tuned for more episodes on AI Talk Radio!\n[MUSIC CUE: OUTRO MUSIC]`;
   }
 
-  // Multiply body content to approximate target word count
   let fullBody = body;
   const currentCount = (intro + body + outro).split(/\s+/).length;
   if (targetWords > currentCount) {
