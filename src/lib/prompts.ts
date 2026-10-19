@@ -1,4 +1,4 @@
-import { LanguageOption, ToneOption, VoiceMapping } from '@/types/radio';
+import { LanguageOption, PodcastFormat, ToneOption, HostConfig, VoiceMapping } from '@/types/radio';
 
 export function getTargetWordCount(durationMinutes: number): number {
   return durationMinutes * 150;
@@ -7,17 +7,13 @@ export function getTargetWordCount(durationMinutes: number): number {
 export function getVoiceMapping(language: LanguageOption): VoiceMapping {
   switch (language) {
     case 'Hindi':
-      return { voice: 'Kore', languageCode: 'hi-IN' };
+      return { maleVoice: 'hi-IN-MadhurNeural', femaleVoice: 'hi-IN-SwaraNeural', languageCode: 'hi-IN' };
     case 'English':
-      return { voice: 'Paul', languageCode: 'en-US' };
+      return { maleVoice: 'en-IN-PrabhatNeural', femaleVoice: 'en-IN-NeerjaNeural', languageCode: 'en-IN' };
     case 'Hinglish':
-      return { voice: 'Kore', languageCode: 'hi-IN' };
-    case 'Marathi':
-    case 'Tamil':
-    case 'Bengali':
-    case 'Gujarati':
+      return { maleVoice: 'hi-IN-MadhurNeural', femaleVoice: 'hi-IN-SwaraNeural', languageCode: 'hi-IN' };
     default:
-      return { voice: 'Kore', languageCode: 'hi-IN' };
+      return { maleVoice: 'hi-IN-MadhurNeural', femaleVoice: 'hi-IN-SwaraNeural', languageCode: 'hi-IN' };
   }
 }
 
@@ -25,55 +21,51 @@ export function buildScriptPrompt(
   topic: string,
   durationMinutes: number,
   language: LanguageOption,
-  tone: ToneOption
+  format: PodcastFormat = 'Real FM Radio Talk Show',
+  tone: ToneOption = 'INFORMATIVE',
+  hosts?: HostConfig,
+  instructions?: string,
+  targetAudience?: string
 ): string {
   const targetWords = getTargetWordCount(durationMinutes);
+  const maleName = hosts?.maleHost?.name || 'Aryan';
+  const femaleName = hosts?.femaleHost?.name || 'Ananya';
 
   let languageInstruction = '';
   switch (language) {
     case 'Hindi':
-      languageInstruction = 'Generate the entire radio show script in pure Hindi language (Devanagari script), engaging radio style.';
+      languageInstruction = 'Generate the entire radio show script in authentic conversational Hindi (Devanagari script). Presenters sound like real energetic Indian RJs.';
       break;
     case 'Hinglish':
-      languageInstruction = 'Generate the entire radio show script in Hinglish (Hindi + English mix written in Roman script), lively conversational radio style.';
+      languageInstruction = 'Generate the script in natural Hinglish (Hindi + English mix written in Roman script), lively conversational radio style.';
       break;
     case 'English':
-      languageInstruction = 'Generate the entire radio show script in fluent English, professional radio broadcast style.';
-      break;
-    case 'Marathi':
-      languageInstruction = 'Generate the entire radio show script in Marathi language (Devanagari script), engaging radio style.';
-      break;
-    case 'Tamil':
-      languageInstruction = 'Generate the entire radio show script in Tamil language, engaging radio style.';
-      break;
-    case 'Bengali':
-      languageInstruction = 'Generate the entire radio show script in Bengali language, engaging radio style.';
-      break;
-    case 'Gujarati':
-      languageInstruction = 'Generate the entire radio show script in Gujarati language, engaging radio style.';
+      languageInstruction = 'Generate the script in fluent, engaging English with a dynamic radio talk show flow.';
       break;
     default:
-      languageInstruction = 'Generate the entire radio show script in pure Hindi language (Devanagari script), engaging radio style.';
+      languageInstruction = 'Generate the entire script in authentic conversational Hindi (Devanagari script).';
   }
 
-  return `You are a world-class AI Radio Host producing a top-rated talk radio episode.
+  return `You are a world-class AI Radio Producer creating a show for "RadioVerse AI".
 
-SHOW CONFIGURATION:
+SHOW METADATA:
 - Topic: ${topic}
-- Target Duration: ${durationMinutes} minutes
-- Target Word Count: approximately ${targetWords} words (calculated at ~150 words per minute)
-- Tone / Vibe: ${tone}
-- Language Instruction: ${languageInstruction}
+- Format: ${format}
+- Target Duration: ${durationMinutes} minutes (~${targetWords} words)
+- Tone / Energy: ${tone}
+- Language Style: ${languageInstruction}
+${instructions ? `- Instructions: ${instructions}` : ''}
+${targetAudience ? `- Audience: ${targetAudience}` : ''}
 
-REQUIREMENTS:
-1. ${languageInstruction}
-2. Structure the script as a natural, engaging talk radio podcast show featuring a main Host (and co-host/guest where appropriate) or a single charismatic Host.
-3. Include occasional inline sound/music cues placed on their own line or in brackets, such as [MUSIC CUE], [SFX: INTRO JINGLE], [SFX: APPLAUSE], or [MUSIC CUE: FADE IN SOFT UPBEAT TRACK].
-4. Format speaker lines clearly as:
-Host: <speech text>
-Co-Host: <speech text>
-5. Keep the total length around ${targetWords} words so it fits exactly ${durationMinutes} minutes of radio broadcasting.
-6. Make the intro punchy, the content informative and entertaining according to tone "${tone}", and end with a smooth radio outro.
+PRESENTERS:
+1. ${maleName} (Male Host)
+2. ${femaleName} (Female Host)
+
+FORMAT REQUIREMENTS:
+Format speaker lines strictly as:
+${maleName} (Male Host): <dialogue text>
+${femaleName} (Female Host): <dialogue text>
+[MUSIC CUE: <description>]
 
 Generate the full radio script now.`;
 }

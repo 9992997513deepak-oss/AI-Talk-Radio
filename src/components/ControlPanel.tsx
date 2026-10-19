@@ -29,7 +29,7 @@ export function ControlPanel({
   isLoading,
   dailyAllowance,
 }: ControlsProps) {
-  const durations: DurationOption[] = [3, 5, 8, 10, 15];
+  const durations: DurationOption[] = [1, 3, 5, 10, 15, 20, 30, 45, 60];
   const languages: LanguageOption[] = ['Hindi', 'English', 'Hinglish', 'Marathi', 'Tamil', 'Bengali', 'Gujarati'];
   const tones: ToneOption[] = ['INFORMATIVE', 'ENTERTAINING', 'CASUAL', 'DRAMATIC', 'EDUCATIONAL'];
 
@@ -42,7 +42,6 @@ export function ControlPanel({
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-0.5 flex items-center justify-center shadow-lg shadow-indigo-500/20">
@@ -56,14 +55,12 @@ export function ControlPanel({
           </div>
         </div>
 
-        {/* Daily Allowance Badge */}
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-800 text-xs font-medium text-slate-300">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
           <span>Daily allowance <strong className="text-indigo-400">{dailyAllowance}/50</strong></span>
         </div>
       </div>
 
-      {/* Main Prompt Input Box */}
       <div className="relative group rounded-2xl bg-slate-900/90 border border-slate-800 p-4 shadow-2xl backdrop-blur-xl focus-within:border-indigo-500/50 transition-all duration-300">
         <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
           Radio Topic & Concept
@@ -76,7 +73,6 @@ export function ControlPanel({
           className="w-full bg-transparent text-slate-100 text-lg placeholder-slate-500 border-none outline-none resize-none focus:ring-0 leading-relaxed"
         />
 
-        {/* Suggestion Chips */}
         <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-slate-800/60">
           <span className="text-xs text-slate-500 font-medium">Try topic:</span>
           {suggestions.map((s, idx) => (
@@ -90,10 +86,8 @@ export function ControlPanel({
           ))}
         </div>
 
-        {/* Bottom Control Pills Row */}
         <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t border-slate-800/80">
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Duration Selector */}
             <div className="relative group/select">
               <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/70 text-xs font-medium text-slate-200 cursor-pointer transition">
                 <Clock className="w-3.5 h-3.5 text-indigo-400" />
@@ -113,7 +107,6 @@ export function ControlPanel({
               </select>
             </div>
 
-            {/* Language Selector */}
             <div className="relative group/select">
               <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/70 text-xs font-medium text-slate-200 cursor-pointer transition">
                 <Globe className="w-3.5 h-3.5 text-pink-400" />
@@ -133,7 +126,6 @@ export function ControlPanel({
               </select>
             </div>
 
-            {/* Tone Selector */}
             <div className="relative group/select">
               <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/70 text-xs font-medium text-slate-200 cursor-pointer transition">
                 <SlidersHorizontal className="w-3.5 h-3.5 text-purple-400" />
@@ -154,7 +146,6 @@ export function ControlPanel({
             </div>
           </div>
 
-          {/* GENERATE Button */}
           <button
             onClick={onGenerate}
             disabled={isLoading || !topic.trim()}
